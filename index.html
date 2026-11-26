@@ -110,6 +110,14 @@ nav.tabs .ic { width: 24px; height: 24px; }
 a { color: var(--accent); text-decoration: none; }
 a.row { color: var(--text); }
 .hidden { display: none !important; }
+.fitem { display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; position: relative; color: var(--text); }
+.fitem + .fitem::before { content: ""; position: absolute; top: 0; left: 88px; right: 0; border-top: .5px solid var(--line); }
+.thumb { width: 60px; height: 60px; border-radius: 10px; object-fit: cover; background: var(--field); flex: none; }
+.ftitle { font-weight: 600; font-size: 15px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.fprice { font-weight: 700; margin-top: 3px; }
+.newdot { width: 8px; height: 8px; border-radius: 50%; background: var(--ebay); display: inline-block; margin-right: 6px; vertical-align: middle; }
+.fchip { font-size: 13px; padding: 6px 12px; border-radius: 99px; background: var(--card); color: var(--text); box-shadow: var(--shadow); }
+.fchip.on { background: var(--accent); color: #fff; }
 .logo { width: 56px; height: 56px; border-radius: 13px; display: block; margin: 20px 4px 4px; }
 </style>
 </head>
@@ -140,6 +148,13 @@ a.row { color: var(--text); }
   </div>
   <p class="foot">Wird nur in diesem Browser gespeichert und nur an api.github.com gesendet.</p>
   <div style="margin-top:18px"><button class="btn" id="s-connect">Verbinden</button></div>
+</main>
+
+<!-- Funde -->
+<main id="tab-found" class="tab hidden">
+  <h1>Funde <button class="icon-btn" id="found-reload" aria-label="Aktualisieren" style="font-size:18px">↻</button></h1>
+  <div class="chips" id="found-filter" style="margin:0 4px 12px"></div>
+  <div id="found-list"></div>
 </main>
 
 <!-- Aufträge -->
@@ -175,7 +190,8 @@ a.row { color: var(--text); }
 </main>
 
 <nav class="tabs hidden" id="tabs">
-  <button data-tab="watches" class="on"><svg class="ic" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>Aufträge</button>
+  <button data-tab="found"><svg class="ic" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>Funde</button>
+  <button data-tab="watches"><svg class="ic" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>Aufträge</button>
   <button data-tab="status"><svg class="ic" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Status</button>
   <button data-tab="settings"><svg class="ic" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Einstellungen</button>
 </nav>
@@ -285,6 +301,44 @@ async function loadWatches() {
   try { return JSON.parse(await api(`/contents/watches.json?ref=${encodeURIComponent(S.branch)}`, { accept: "application/vnd.github.raw+json" })).watches || []; }
   catch (e) { if (e.code === 404) return []; throw e; }
 }
+async function loadFound() {
+  try { return JSON.parse(await api("/contents/found.json?ref=watcher-data", { accept: "application/vnd.github.raw+json" })).found || []; }
+  catch (e) { if (e.code === 404) return []; throw e; }
+}
+S.found = []; S.foundFilter = "";
+function renderFound() {
+  const lastSeen = store.get("foundSeen", "");
+  const names = [...new Set(S.found.map((f) => f.watch))];
+  $("found-filter").innerHTML = names.length > 1 ? ["", ...names].map((n) =>
+    `<button class="fchip ${S.foundFilter === n ? "on" : ""}" data-w="${esc(n)}">${n ? esc(n) : "Alle"}</button>`).join("") : "";
+  $("found-filter").querySelectorAll("button").forEach((b) => b.onclick = () => { S.foundFilter = b.dataset.w; renderFound(); });
+  const list = S.found.filter((f) => !S.foundFilter || f.watch === S.foundFilter);
+  if (!list.length) {
+    $("found-list").innerHTML = `<div class="empty"><div class="big">📭</div><h3>Noch keine Funde</h3>
+      <p>Hier erscheinen alle Angebote, die der Watcher gemeldet hat, auch wenn eine Push-Nachricht nicht ankommt.</p></div>`;
+    return;
+  }
+  $("found-list").innerHTML = `<div class="group">${list.map((f) => {
+    const price = f.price == null ? "Preis k. A." : euro(f.price) + (f.price_negotiable ? " VB" : "");
+    const isNew = lastSeen && f.found_at > lastSeen;
+    const badge = f.kind === "bargain" ? "🔥 " : f.kind === "suspicious" ? "⚠️ " : "";
+    return `<a class="fitem tap" href="${esc(f.url)}" target="_blank" rel="noopener">
+      ${f.image ? `<img class="thumb" src="${esc(f.image)}" alt="" loading="lazy">` : `<div class="thumb"></div>`}
+      <div class="grow" style="min-width:0">
+        <div class="ftitle">${isNew ? '<span class="newdot"></span>' : ""}${badge}${esc(f.title)}</div>
+        <div class="fprice">${price}</div>
+        <div class="chips"><span class="chip ${esc(f.source)}">${f.source === "ebay" ? "eBay" : "Kleinanzeigen"}</span>
+          <span class="small">${esc(f.watch)} · ${rel(f.found_at)} · Vertrauen ${f.score}</span></div>
+        ${f.reasons ? `<div class="small" style="margin-top:3px">${esc(f.reasons)}</div>` : ""}
+      </div></a>`;
+  }).join("")}</div><p class="foot">Antippen öffnet das Angebot. Gespeichert werden die letzten 300 Funde.</p>`;
+}
+async function refreshFound(markSeen) {
+  try { S.found = await loadFound(); } catch (e) { message("Funde laden fehlgeschlagen", e.message); }
+  renderFound();
+  if (markSeen && S.found.length) setTimeout(() => store.set("foundSeen", S.found[0].found_at), 1500);
+}
+$("found-reload").onclick = () => refreshFound(true);
 async function loadRuns() { return (await api("/actions/workflows/watch.yml/runs?per_page=15")).workflow_runs || []; }
 
 // ---- Meldungen ------------------------------------------------------------
@@ -460,11 +514,12 @@ $("test-push").onclick = () => dispatch(true);
 function showTab(name) {
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("hidden", t.id !== "tab-" + name));
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
+  if (name === "found") refreshFound(true);
   if (name === "status") loadRuns().then((r) => { S.runs = r; renderStatus(); }).catch(() => {});
   window.scrollTo(0, 0);
 }
 document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => showTab(b.dataset.tab));
-function showApp() { $("setup").classList.add("hidden"); $("tabs").classList.remove("hidden"); showTab("watches"); refresh(); }
+function showApp() { $("setup").classList.add("hidden"); $("tabs").classList.remove("hidden"); showTab("found"); refresh(); }
 function showSetup() {
   document.querySelectorAll(".tab").forEach((t) => t.classList.add("hidden")); $("tabs").classList.add("hidden");
   $("setup").classList.remove("hidden"); $("s-owner").value = S.owner; $("s-repo").value = S.repo; $("s-token").value = "";
@@ -483,7 +538,7 @@ $("signout").onclick = async () => {
   if (!(await confirmBox("Token entfernen?", "Der Token wird aus diesem Browser gelöscht."))) return;
   store.del("token"); S.token = ""; showSetup();
 };
-document.addEventListener("visibilitychange", () => { if (!document.hidden && S.token) refresh(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && S.token) { refresh(); refreshFound(false); } });
 S.token ? showApp() : showSetup();
 </script>
 </body>
