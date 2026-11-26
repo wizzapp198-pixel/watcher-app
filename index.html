@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Watcher</title>
+<meta name="description" content="Steuerung für den eBay- & Kleinanzeigen-Watcher">
+<meta name="theme-color" content="#1e604c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Watcher">
+<meta name="referrer" content="no-referrer">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+:root {
+  --bg: #f2f2f7; --card: #ffffff; --text: #111114; --muted: #6e6e73; --line: rgba(60,60,67,.14);
+  --accent: #247a5e; --accent-soft: rgba(36,122,94,.12); --danger: #d93025; --warn: #e8890c;
+  --ebay: #1f6fd1; --ka: #2d8a3e; --field: #f2f2f7; --shadow: 0 1px 2px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000; --card: #1c1c1e; --text: #f5f5f7; --muted: #98989f; --line: rgba(84,84,88,.5);
+    --accent: #5ec79e; --accent-soft: rgba(94,199,158,.15); --danger: #ff6961; --warn: #ffb340;
+    --ebay: #6ea8ff; --ka: #6fd389; --field: #2c2c2e; --shadow: none;
+  }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body {
+  font: 16px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  padding: env(safe-area-inset-top) 0 calc(76px + env(safe-area-inset-bottom));
+  -webkit-font-smoothing: antialiased;
+}
+main { max-width: 640px; margin: 0 auto; padding: 0 16px; }
+h1 { font-size: 32px; font-weight: 700; letter-spacing: -.02em; margin: 18px 4px 14px; display: flex; align-items: center; justify-content: space-between; }
+h2 { font-size: 13px; font-weight: 500; text-transform: uppercase; letter-spacing: .02em; color: var(--muted); margin: 22px 16px 6px; }
+.foot { font-size: 13px; color: var(--muted); margin: 6px 16px 0; }
+.group { background: var(--card); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+.row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; min-height: 48px; position: relative; }
+.row + .row::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; border-top: .5px solid var(--line); }
+.row .grow { flex: 1; min-width: 0; }
+.row .val { color: var(--muted); text-align: right; }
+.tap { cursor: pointer; }
+.tap:active { background: var(--line); }
+.chev::after { content: "›"; color: var(--muted); font-size: 22px; line-height: 1; opacity: .6; }
+.title { font-weight: 600; }
+.sub { color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 5px; align-items: center; }
+.chip { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 99px; }
+.chip.ebay { color: var(--ebay); background: color-mix(in srgb, var(--ebay) 14%, transparent); }
+.chip.kleinanzeigen { color: var(--ka); background: color-mix(in srgb, var(--ka) 14%, transparent); }
+.chip.paused { color: var(--muted); background: var(--line); }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ka); flex: none; }
+.dot.off { background: var(--line); }
+.small { font-size: 12px; color: var(--muted); }
+button { font: inherit; border: 0; cursor: pointer; }
+.btn { background: var(--accent); color: #fff; border-radius: 12px; padding: 14px 18px; font-weight: 600; width: 100%; }
+.btn:disabled { opacity: .45; }
+.btn.plain { background: transparent; color: var(--accent); padding: 8px; width: auto; }
+.btn.danger { background: transparent; color: var(--danger); }
+.icon-btn { background: var(--accent-soft); color: var(--accent); width: 36px; height: 36px; border-radius: 50%; font-size: 24px; line-height: 36px; padding: 0; }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.tile { border-radius: 16px; padding: 18px 12px; color: #fff; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.tile .ic { font-size: 24px; }
+.tile.a { background: linear-gradient(160deg, #2d8c6c, #1d5f4b); }
+.tile.b { background: linear-gradient(160deg, #f0a03a, #d9770b); }
+.badge { font-size: 12px; font-weight: 700; }
+.ok { color: var(--ka); } .fail { color: var(--danger); } .run { color: var(--ebay); }
+input, select { font: inherit; color: var(--text); background: transparent; border: 0; outline: none; width: 100%; min-width: 0; }
+input::placeholder { color: var(--muted); opacity: .7; }
+.row label { flex: none; }
+.row input.r, .row select.r { text-align: right; flex: 1; }
+.seg { display: flex; background: var(--field); border-radius: 9px; padding: 2px; width: 100%; }
+.seg button { flex: 1; background: transparent; color: var(--text); padding: 7px 4px; border-radius: 7px; font-size: 14px; }
+.seg button.on { background: var(--card); box-shadow: 0 1px 3px rgba(0,0,0,.15); font-weight: 600; }
+.switch { position: relative; width: 51px; height: 31px; flex: none; }
+.switch input { opacity: 0; position: absolute; inset: 0; margin: 0; cursor: pointer; z-index: 1; }
+.switch span { position: absolute; inset: 0; background: var(--line); border-radius: 99px; transition: .2s; }
+.switch span::after { content: ""; position: absolute; left: 2px; top: 2px; width: 27px; height: 27px; background: #fff; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,.2); transition: .2s; }
+.switch input:checked + span { background: var(--ka); }
+.switch input:checked + span::after { transform: translateX(20px); }
+nav.tabs { position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: center; gap: 0;
+  background: color-mix(in srgb, var(--card) 85%, transparent); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-top: .5px solid var(--line); padding: 6px 0 calc(6px + env(safe-area-inset-bottom)); z-index: 5; }
+nav.tabs button { background: none; color: var(--muted); flex: 1; max-width: 160px; display: flex; flex-direction: column; align-items: center; font-size: 11px; gap: 2px; padding: 4px; }
+nav.tabs button.on { color: var(--accent); }
+nav.tabs .ic { width: 24px; height: 24px; }
+.sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 10; display: none; }
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; top: max(24px, env(safe-area-inset-top)); background: var(--bg); z-index: 11;
+  border-radius: 14px 14px 0 0; transform: translateY(105%); transition: transform .28s cubic-bezier(.2,.8,.2,1); display: flex; flex-direction: column; }
+.sheet.open { transform: none; }
+.sheet header { display: flex; align-items: center; justify-content: space-between; padding: 12px 10px; border-bottom: .5px solid var(--line); }
+.sheet header b { font-size: 17px; }
+.sheet .body { overflow-y: auto; padding: 0 16px calc(30px + env(safe-area-inset-bottom)); flex: 1; max-width: 640px; width: 100%; margin: 0 auto; }
+.overlay { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.25); display: none; align-items: center; justify-content: center; padding: 24px; }
+.overlay.show { display: flex; }
+.panel { background: var(--card); border-radius: 16px; padding: 22px; max-width: 320px; width: 100%; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,.25); }
+.panel p { color: var(--muted); font-size: 14px; white-space: pre-line; margin: 8px 0 16px; }
+.spinner { width: 34px; height: 34px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 12px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty { text-align: center; padding: 48px 24px; color: var(--muted); }
+.empty .big { font-size: 46px; margin-bottom: 8px; }
+.empty h3 { color: var(--text); margin: 0 0 6px; }
+.step { display: flex; gap: 10px; align-items: baseline; }
+.step i { font-style: normal; flex: none; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+a { color: var(--accent); text-decoration: none; }
+a.row { color: var(--text); }
+.hidden { display: none !important; }
+.logo { width: 56px; height: 56px; border-radius: 13px; display: block; margin: 20px 4px 4px; }
+</style>
+</head>
+<body>
+
+<!-- Einrichtung -->
+<main id="setup" class="hidden">
+  <img src="icon-180.png" alt="" class="logo">
+  <h1>Watcher verbinden</h1>
+  <p class="foot" style="margin-top:-6px">Die Web-App steuert deinen Watcher über GitHub. Einmalig brauchst du einen Zugangsschlüssel (Token).</p>
+  <h2>So erstellst du den Token</h2>
+  <div class="group">
+    <div class="row step"><i>1</i><div>Unten auf „Token erstellen“ tippen und bei GitHub anmelden.</div></div>
+    <div class="row step"><i>2</i><div>Name z. B. „Watcher Web“, Ablauf: 1 Jahr.</div></div>
+    <div class="row step"><i>3</i><div>Repository access → <b>Only select repositories</b> → dein Watcher-Repo.</div></div>
+    <div class="row step"><i>4</i><div>Permissions: <b>Actions</b> Read and write, <b>Contents</b> Read-only, <b>Issues</b> Read and write.</div></div>
+    <div class="row step"><i>5</i><div>Generate token → kopieren → hier einfügen.</div></div>
+    <a class="row tap chev" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener"><span class="grow">Token erstellen</span></a>
+  </div>
+  <h2>Repository</h2>
+  <div class="group">
+    <div class="row"><label>Besitzer</label><input class="r" id="s-owner" autocapitalize="off" autocomplete="off" spellcheck="false"></div>
+    <div class="row"><label>Repo</label><input class="r" id="s-repo" autocapitalize="off" autocomplete="off" spellcheck="false"></div>
+  </div>
+  <h2>Token</h2>
+  <div class="group">
+    <div class="row"><input id="s-token" type="password" placeholder="github_pat_…" autocapitalize="off" autocomplete="off" spellcheck="false"></div>
+  </div>
+  <p class="foot">Wird nur in diesem Browser gespeichert und nur an api.github.com gesendet.</p>
+  <div style="margin-top:18px"><button class="btn" id="s-connect">Verbinden</button></div>
+</main>
+
+<!-- Aufträge -->
+<main id="tab-watches" class="tab hidden">
+  <h1>Suchaufträge <button class="icon-btn" id="add" aria-label="Neuer Suchauftrag">+</button></h1>
+  <div id="watch-list"></div>
+</main>
+
+<!-- Status -->
+<main id="tab-status" class="tab hidden">
+  <h1>Status</h1>
+  <div class="tiles">
+    <button class="tile a" id="run-now"><span class="ic">⚡</span>Jetzt suchen</button>
+    <button class="tile b" id="test-push"><span class="ic">🔔</span>Test-Push</button>
+  </div>
+  <h2>Überblick</h2>
+  <div class="group" id="overview"></div>
+  <p class="foot">GitHub startet geplante Läufe oft einige Minuten verspätet.</p>
+  <h2>Letzte Läufe</h2>
+  <div class="group" id="runs"></div>
+</main>
+
+<!-- Einstellungen -->
+<main id="tab-settings" class="tab hidden">
+  <h1>Einstellungen</h1>
+  <h2>Verbunden mit</h2>
+  <div class="group" id="conn"></div>
+  <h2>Links</h2>
+  <div class="group" id="links"></div>
+  <h2>&nbsp;</h2>
+  <div class="group"><button class="row tap btn danger" id="signout" style="justify-content:center">Token entfernen / neu verbinden</button></div>
+  <p class="foot">Watcher Web 1.0 · Tipp: In Safari „Teilen → Zum Home-Bildschirm“ – dann läuft die Web-App wie eine App und muss nie erneuert werden.</p>
+</main>
+
+<nav class="tabs hidden" id="tabs">
+  <button data-tab="watches" class="on"><svg class="ic" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>Aufträge</button>
+  <button data-tab="status"><svg class="ic" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Status</button>
+  <button data-tab="settings"><svg class="ic" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Einstellungen</button>
+</nav>
+
+<!-- Editor -->
+<div class="sheet-bg" id="sheet-bg"></div>
+<section class="sheet" id="sheet" aria-modal="true" role="dialog">
+  <header>
+    <button class="btn plain" id="e-cancel">Abbrechen</button>
+    <b id="e-title">Neuer Auftrag</b>
+    <button class="btn plain" id="e-save" style="font-weight:700">Speichern</button>
+  </header>
+  <div class="body">
+    <h2>Suche</h2>
+    <div class="group">
+      <div class="row"><input id="e-name" placeholder="Name, z. B. iPhone 13"></div>
+      <div class="row"><input id="e-query" placeholder="Suchbegriff, z. B. iphone 13 128gb" autocapitalize="off"></div>
+      <div class="row"><span class="grow">eBay</span><label class="switch"><input type="checkbox" id="e-ebay"><span></span></label></div>
+      <div class="row"><span class="grow">Kleinanzeigen</span><label class="switch"><input type="checkbox" id="e-ka"><span></span></label></div>
+    </div>
+    <h2>Preis</h2>
+    <div class="group">
+      <div class="row"><label>Mindestpreis</label><input class="r" id="e-min" inputmode="decimal" placeholder="–"><span class="small">€</span></div>
+      <div class="row"><label>Höchstpreis</label><input class="r" id="e-max" inputmode="decimal" placeholder="–"><span class="small">€</span></div>
+      <div class="row"><label>Referenzpreis</label><input class="r" id="e-ref" inputmode="decimal" placeholder="–"><span class="small">€</span></div>
+    </div>
+    <p class="foot">Referenzpreis = üblicher Marktpreis. Damit erkennt der Watcher Schnäppchen 🔥 und verdächtig billige Angebote.</p>
+    <h2>Filter</h2>
+    <div class="group">
+      <div class="row"><div class="seg" id="e-cond" data-val="egal">
+        <button data-v="egal">Egal</button><button data-v="neu">Neu</button><button data-v="gebraucht">Gebraucht</button></div></div>
+      <div class="row" id="row-buying"><label>eBay-Kaufart</label>
+        <select class="r" id="e-buying"><option value="egal">Egal</option><option value="sofort">Sofort-Kaufen</option><option value="auktion">Auktion</option></select></div>
+      <div class="row"><input id="e-exclude" placeholder="Ausschlusswörter (Komma-getrennt)" autocapitalize="off"></div>
+    </div>
+    <div id="ka-section">
+      <h2>Kleinanzeigen</h2>
+      <div class="group">
+        <div class="row"><label>Umkreis</label>
+          <select class="r" id="e-radius">
+            <option value="0">Ganz Deutschland</option><option>5</option><option>10</option><option>20</option><option>30</option>
+            <option selected>50</option><option>100</option><option>150</option><option>200</option></select><span class="small" id="km">km</span></div>
+        <div class="row" id="row-plz"><label>PLZ</label><input class="r" id="e-plz" inputmode="numeric" maxlength="5" placeholder="06773"></div>
+        <div class="row"><span class="grow">Nur mit Versand</span><label class="switch"><input type="checkbox" id="e-ship"><span></span></label></div>
+      </div>
+      <p class="foot">Gräfenhainichen 06773 · Bitterfeld-Wolfen 06749</p>
+    </div>
+    <h2>Seriosität</h2>
+    <div class="group">
+      <div class="row"><label>Mindest-Vertrauen</label>
+        <select class="r" id="e-trust"><option value="0">Standard (60)</option><option>40</option><option>50</option><option>60</option><option>70</option><option>80</option></select></div>
+      <div class="row"><span class="grow">Verdächtige trotzdem senden ⚠️</span><label class="switch"><input type="checkbox" id="e-susp"><span></span></label></div>
+      <div class="row"><span class="grow">Aktiv</span><label class="switch"><input type="checkbox" id="e-active"><span></span></label></div>
+    </div>
+    <p class="foot">Angebote unter dem Mindest-Vertrauen werden nicht gemeldet. Betrugs-Hinweise wie WhatsApp oder PayPal Freunde drücken den Score immer darunter.</p>
+    <div id="e-del-wrap" style="margin-top:22px"><div class="group"><button class="row tap btn danger" id="e-delete" style="justify-content:center">Suchauftrag löschen</button></div></div>
+  </div>
+</section>
+
+<!-- Warte-/Meldungsfenster -->
+<div class="overlay" id="overlay"><div class="panel">
+  <div class="spinner" id="o-spin"></div>
+  <b id="o-title"></b>
+  <p id="o-text"></p>
+  <button class="btn" id="o-ok">OK</button>
+  <div id="o-confirm" class="hidden" style="display:flex;gap:10px"><button class="btn" id="o-no" style="background:var(--line);color:var(--text)">Abbrechen</button><button class="btn" id="o-yes" style="background:var(--danger)">Löschen</button></div>
+</div></div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k, d = "") { try { return localStorage.getItem("watcher." + k) ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("watcher." + k, v); } catch {} },
+  del(k) { try { localStorage.removeItem("watcher." + k); } catch {} },
+};
+const S = { owner: store.get("owner", "wizzapp198-pixel"), repo: store.get("repo", "Ebay-watcher-"),
+  token: store.get("token"), branch: "", isPrivate: false, watches: [], runs: [], editing: null };
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const euro = (v) => new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: v % 1 ? 2 : 0 }).format(v);
+const plain = (v) => v == null ? "" : (v % 1 ? String(v).replace(".", ",") : String(v));
+const rel = (iso) => { const s = (new Date(iso) - Date.now()) / 1000; const f = new Intl.RelativeTimeFormat("de", { numeric: "auto" });
+  for (const [u, n] of [["second", 60], ["minute", 60], ["hour", 24], ["day", 7]]) { if (Math.abs(s / ({second:1,minute:60,hour:3600,day:86400}[u])) < n) return f.format(Math.round(s / ({second:1,minute:60,hour:3600,day:86400}[u])), u); }
+  return new Date(iso).toLocaleDateString("de-DE"); };
+
+// ---- GitHub-API -----------------------------------------------------------
+async function api(path, { method = "GET", body, accept = "application/vnd.github+json" } = {}, cfg = S) {
+  let res;
+  try {
+    res = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}${path}`, {
+      method, cache: "no-store",
+      headers: { Authorization: `Bearer ${cfg.token}`, Accept: accept, "X-GitHub-Api-Version": "2022-11-28",
+        ...(body ? { "Content-Type": "application/json" } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (e) { throw new Error("Keine Verbindung zu GitHub."); }
+  if (res.ok) return res.status === 204 ? null : (accept.includes("raw") ? res.text() : res.json());
+  if (res.status === 401) throw new Error("Token ungültig oder abgelaufen.");
+  if (res.status === 403) throw new Error("Keine Berechtigung. Token-Rechte prüfen (Contents, Issues, Actions).");
+  if (res.status === 404) { const e = new Error("Nicht gefunden. Repo-Name und Token-Zugriff prüfen."); e.code = 404; throw e; }
+  throw new Error(`GitHub-Fehler ${res.status}: ${(await res.text()).slice(0, 160)}`);
+}
+async function loadWatches() {
+  try { return JSON.parse(await api(`/contents/watches.json?ref=${encodeURIComponent(S.branch)}`, { accept: "application/vnd.github.raw+json" })).watches || []; }
+  catch (e) { if (e.code === 404) return []; throw e; }
+}
+async function loadRuns() { return (await api("/actions/workflows/watch.yml/runs?per_page=15")).workflow_runs || []; }
+
+// ---- Meldungen ------------------------------------------------------------
+function busy(title) { $("o-spin").classList.remove("hidden"); $("o-title").textContent = title;
+  $("o-text").textContent = "GitHub übernimmt das gerade, dauert meist unter einer Minute."; $("o-ok").classList.add("hidden");
+  $("o-confirm").classList.add("hidden"); $("overlay").classList.add("show"); }
+function done() { $("overlay").classList.remove("show"); }
+function message(title, text) { $("o-spin").classList.add("hidden"); $("o-title").textContent = title; $("o-text").textContent = text;
+  $("o-ok").classList.remove("hidden"); $("o-confirm").classList.add("hidden"); $("overlay").classList.add("show"); }
+function confirmBox(title, text) { return new Promise((resolve) => { $("o-spin").classList.add("hidden"); $("o-title").textContent = title;
+  $("o-text").textContent = text; $("o-ok").classList.add("hidden"); $("o-confirm").classList.remove("hidden"); $("overlay").classList.add("show");
+  $("o-yes").onclick = () => { done(); resolve(true); }; $("o-no").onclick = () => { done(); resolve(false); }; }); }
+$("o-ok").onclick = done;
+
+// ---- Formular -> Issue ----------------------------------------------------
+function issueBody(d) {
+  const f = (l, v) => `### ${l}\n\n${String(v ?? "").trim() || "_No response_"}\n\n`;
+  const b = (on, l) => `- [${on ? "X" : " "}] ${l}`;
+  return f("Name des Suchauftrags", d.name) + f("Suchbegriff", d.query) +
+    `### Quellen\n\n${b(d.ebay, "eBay")}\n${b(d.ka, "Kleinanzeigen")}\n\n` +
+    f("Mindestpreis (€)", d.min) + f("Höchstpreis (€)", d.max) + f("Referenzpreis (€)", d.ref) +
+    f("Zustand", d.cond) + f("Kaufart (nur eBay)", { sofort: "Sofort-Kaufen", auktion: "Auktion" }[d.buying] || "egal") +
+    f("PLZ (nur Kleinanzeigen)", d.radius ? d.plz : "") + f("Umkreis (nur Kleinanzeigen)", d.radius ? `${d.radius} km` : "ganz Deutschland") +
+    `### Versand\n\n${b(d.ship, "Nur Angebote mit Versand (Kleinanzeigen)")}\n\n` +
+    f("Ausschlusswörter", d.exclude) + f("Mindest-Vertrauen", d.trust ? String(d.trust) : "Standard (60)") +
+    `### Optionen\n\n${b(d.susp, "Verdächtige Angebote trotzdem senden (⚠️)")}\n${b(!d.active, "Suchauftrag pausieren")}\n`;
+}
+function draftFrom(w) {
+  return w ? { name: w.name, query: w.query, ebay: w.sources.includes("ebay"), ka: w.sources.includes("kleinanzeigen"),
+    min: plain(w.min_price), max: plain(w.max_price), ref: plain(w.ref_price), cond: w.condition || "egal", buying: w.buying || "egal",
+    plz: w.plz || "", radius: w.plz ? (w.radius || 0) : 0, ship: !!w.shipping_only, exclude: (w.exclude || []).join(", "),
+    trust: w.min_trust || 0, susp: !!w.send_suspicious, active: w.active !== false }
+  : { name: "", query: "", ebay: true, ka: true, min: "", max: "", ref: "", cond: "egal", buying: "egal", plz: "06773", radius: 50,
+      ship: false, exclude: "", trust: 0, susp: false, active: true };
+}
+async function submit(title, body, busyText, silent = false) {
+  busy(busyText);
+  try {
+    const issue = await api("/issues", { method: "POST", body: { title, body } });
+    for (let i = 0; i < 40; i++) {
+      await sleep(4000);
+      const comments = await api(`/issues/${issue.number}/comments`);
+      const bot = comments.filter((c) => c.user.login === "github-actions[bot]").pop();
+      if (bot) {
+        const ok = !bot.body.startsWith("❌");
+        const text = bot.body.split("```")[0].replaceAll("**", "").trim();
+        if (!silent || !ok) message(ok ? "Erledigt" : "Nicht übernommen", text); else done();
+        return ok;
+      }
+    }
+    message("Noch in Bearbeitung", "Der Bot hat noch nicht geantwortet. Bitte gleich aktualisieren.");
+  } catch (e) { message("Fehler", e.message); }
+  return false;
+}
+
+// ---- Rendering ------------------------------------------------------------
+function renderWatches() {
+  const el = $("watch-list");
+  if (!S.watches.length) {
+    el.innerHTML = `<div class="empty"><div class="big">🔭</div><h3>Noch keine Suchaufträge</h3>
+      <p>Lege deinen ersten Auftrag an. Beim ersten Lauf werden vorhandene Angebote nur gemerkt, danach meldet der Watcher nur neue.</p>
+      <button class="btn" style="width:auto" onclick="openEditor(null)">＋ Suchauftrag anlegen</button></div>`;
+    return;
+  }
+  el.innerHTML = `<div class="group">${S.watches.map((w, i) => {
+    const active = w.active !== false;
+    const price = w.min_price != null && w.max_price != null ? `${euro(w.min_price)} – ${euro(w.max_price)}`
+      : w.min_price != null ? `ab ${euro(w.min_price)}` : w.max_price != null ? `bis ${euro(w.max_price)}` : "jeder Preis";
+    return `<div class="row tap chev" data-i="${i}"><span class="dot ${active ? "" : "off"}"></span>
+      <div class="grow"><div class="title">${esc(w.name)} ${active ? "" : '<span class="chip paused">pausiert</span>'}</div>
+      <div class="sub">${esc(w.query)}</div>
+      <div class="chips">${w.sources.map((s) => `<span class="chip ${s}">${s === "ebay" ? "eBay" : "Kleinanzeigen"}</span>`).join("")}
+      <span class="small">${price}</span></div></div></div>`;
+  }).join("")}</div><p class="foot">Antippen zum Bearbeiten, Pausieren oder Löschen.</p>`;
+  el.querySelectorAll("[data-i]").forEach((r) => r.onclick = () => openEditor(S.watches[+r.dataset.i]));
+}
+function badge(run) {
+  if (run.status !== "completed") return `<span class="badge run">● läuft</span>`;
+  return { success: `<span class="badge ok">✓ OK</span>`, failure: `<span class="badge fail">✕ Fehler</span>` }[run.conclusion]
+    || `<span class="badge small">${esc(run.conclusion || "?")}</span>`;
+}
+function renderStatus() {
+  const last = S.runs[0];
+  $("overview").innerHTML = (last ? `<div class="row"><span class="grow">Letzter Lauf</span><span class="val">${rel(last.created_at)}</span></div>
+    <div class="row"><span class="grow">Ergebnis</span>${badge(last)}</div>` : "") +
+    `<div class="row"><span class="grow">Intervall</span><span class="val">${S.isPrivate ? "alle 30 Min." : "laut Workflow"}</span></div>
+     <div class="row"><span class="grow">Aktive Aufträge</span><span class="val">${S.watches.filter((w) => w.active !== false).length}</span></div>`;
+  $("runs").innerHTML = S.runs.length ? S.runs.map((r) => `<a class="row tap" href="${esc(r.html_url)}" target="_blank" rel="noopener">${badge(r)}
+    <div class="grow"><div>#${r.run_number} · ${r.event === "schedule" ? "Zeitplan" : r.event === "workflow_dispatch" ? "Manuell" : esc(r.event)}</div>
+    <div class="small">${rel(r.created_at)}</div></div><span class="small">↗</span></a>`).join("")
+    : `<div class="row small">Noch keine Läufe</div>`;
+}
+function renderSettings() {
+  const base = `https://github.com/${S.owner}/${S.repo}`;
+  $("conn").innerHTML = `<div class="row"><span class="grow">Repository</span><span class="val">${esc(S.owner)}/${esc(S.repo)}</span></div>
+    <div class="row"><span class="grow">Branch</span><span class="val">${esc(S.branch || "–")}</span></div>
+    <div class="row"><span class="grow">Sichtbarkeit</span><span class="val">${S.isPrivate ? "privat" : "öffentlich"}</span></div>`;
+  $("links").innerHTML = [["Repository öffnen", base], ["Actions (Läufe & Logs)", base + "/actions"],
+    ["Secrets bearbeiten", base + "/settings/secrets/actions"], ["Anleitung (README)", base + "#readme"]]
+    .map(([t, u]) => `<a class="row tap" href="${esc(u)}" target="_blank" rel="noopener"><span class="grow">${t}</span><span class="small">↗</span></a>`).join("");
+}
+async function refresh() {
+  try {
+    const info = await api("");
+    S.branch = info.default_branch; S.isPrivate = info.private;
+    const [w, r] = await Promise.all([loadWatches(), loadRuns().catch(() => [])]);
+    S.watches = w; S.runs = r;
+  } catch (e) { message("Laden fehlgeschlagen", e.message); }
+  renderWatches(); renderStatus(); renderSettings();
+}
+
+// ---- Editor ---------------------------------------------------------------
+function setSeg(v) { $("e-cond").dataset.val = v; $("e-cond").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.v === v)); }
+$("e-cond").querySelectorAll("button").forEach((b) => b.onclick = () => setSeg(b.dataset.v));
+function syncVisibility() {
+  $("row-buying").classList.toggle("hidden", !$("e-ebay").checked);
+  $("ka-section").classList.toggle("hidden", !$("e-ka").checked);
+  $("row-plz").classList.toggle("hidden", $("e-radius").value === "0");
+  $("km").classList.toggle("hidden", $("e-radius").value === "0");
+  const valid = $("e-name").value.trim() && $("e-query").value.trim() && ($("e-ebay").checked || $("e-ka").checked);
+  $("e-save").disabled = !valid; $("e-save").style.opacity = valid ? 1 : .4;
+}
+["e-ebay", "e-ka", "e-radius", "e-name", "e-query"].forEach((id) => { $(id).addEventListener("input", syncVisibility); $(id).addEventListener("change", syncVisibility); });
+window.openEditor = function (w) {
+  S.editing = w; const d = draftFrom(w);
+  $("e-title").textContent = w ? "Bearbeiten" : "Neuer Auftrag";
+  $("e-name").value = d.name; $("e-query").value = d.query; $("e-ebay").checked = d.ebay; $("e-ka").checked = d.ka;
+  $("e-min").value = d.min; $("e-max").value = d.max; $("e-ref").value = d.ref; setSeg(d.cond); $("e-buying").value = d.buying;
+  $("e-exclude").value = d.exclude; $("e-radius").value = String(d.radius); $("e-plz").value = d.plz; $("e-ship").checked = d.ship;
+  $("e-trust").value = String(d.trust); $("e-susp").checked = d.susp; $("e-active").checked = d.active;
+  $("e-del-wrap").classList.toggle("hidden", !w);
+  syncVisibility();
+  $("sheet-bg").style.display = "block"; requestAnimationFrame(() => $("sheet").classList.add("open"));
+};
+function closeEditor() { $("sheet").classList.remove("open"); setTimeout(() => $("sheet-bg").style.display = "none", 250); }
+$("e-cancel").onclick = closeEditor; $("sheet-bg").onclick = closeEditor;
+function readEditor() {
+  return { name: $("e-name").value.trim(), query: $("e-query").value.trim(), ebay: $("e-ebay").checked, ka: $("e-ka").checked,
+    min: $("e-min").value, max: $("e-max").value, ref: $("e-ref").value, cond: $("e-cond").dataset.val, buying: $("e-buying").value,
+    plz: $("e-plz").value.trim(), radius: +$("e-radius").value, ship: $("e-ship").checked, exclude: $("e-exclude").value,
+    trust: +$("e-trust").value, susp: $("e-susp").checked, active: $("e-active").checked };
+}
+async function reloadSoon() { await sleep(1500); try { S.watches = await loadWatches(); } catch {} renderWatches(); renderStatus(); }
+$("e-save").onclick = async () => {
+  const d = readEditor(); const old = S.editing?.name;
+  const ok = await submit(`[Suchauftrag] ${d.name}`, issueBody(d), "Wird übernommen …");
+  if (ok && old && old.toLowerCase() !== d.name.toLowerCase())
+    await submit(`[Löschen] ${old}`, `### Name des Suchauftrags\n\n${old}\n`, "Alter Name wird entfernt …", true);
+  if (ok) { closeEditor(); reloadSoon(); }
+};
+$("e-delete").onclick = async () => {
+  const w = S.editing; if (!w) return;
+  if (!(await confirmBox("Suchauftrag löschen?", w.name))) return;
+  const ok = await submit(`[Löschen] ${w.name}`, `### Name des Suchauftrags\n\n${w.name}\n`, "Wird gelöscht …");
+  if (ok) { closeEditor(); S.watches = S.watches.filter((x) => x.name !== w.name); renderWatches(); reloadSoon(); }
+};
+$("add").onclick = () => openEditor(null);
+
+// ---- Aktionen -------------------------------------------------------------
+async function dispatch(testPush) {
+  busy(testPush ? "Test-Push wird gestartet …" : "Suche wird gestartet …");
+  try {
+    if (!S.branch) S.branch = (await api("")).default_branch;
+    await api("/actions/workflows/watch.yml/dispatches", { method: "POST", body: { ref: S.branch, inputs: testPush ? { test_push: "true" } : {} } });
+    message("Gestartet", testPush ? "In ca. 1 Minute sollte der Test-Push ankommen." : "Der Lauf startet in wenigen Sekunden.");
+    await sleep(3000); S.runs = await loadRuns().catch(() => S.runs); renderStatus();
+  } catch (e) { message("Start fehlgeschlagen", e.message); }
+}
+$("run-now").onclick = () => dispatch(false);
+$("test-push").onclick = () => dispatch(true);
+
+// ---- Navigation & Einrichtung --------------------------------------------
+function showTab(name) {
+  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("hidden", t.id !== "tab-" + name));
+  document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
+  if (name === "status") loadRuns().then((r) => { S.runs = r; renderStatus(); }).catch(() => {});
+  window.scrollTo(0, 0);
+}
+document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => showTab(b.dataset.tab));
+function showApp() { $("setup").classList.add("hidden"); $("tabs").classList.remove("hidden"); showTab("watches"); refresh(); }
+function showSetup() {
+  document.querySelectorAll(".tab").forEach((t) => t.classList.add("hidden")); $("tabs").classList.add("hidden");
+  $("setup").classList.remove("hidden"); $("s-owner").value = S.owner; $("s-repo").value = S.repo; $("s-token").value = "";
+}
+$("s-connect").onclick = async () => {
+  const cfg = { owner: $("s-owner").value.trim(), repo: $("s-repo").value.trim(), token: $("s-token").value.trim() };
+  if (!cfg.owner || !cfg.repo || !cfg.token) return message("Fehlt etwas", "Bitte Besitzer, Repo und Token ausfüllen.");
+  busy("Verbinde …");
+  try {
+    await api("", {}, cfg);
+    Object.assign(S, cfg); store.set("owner", cfg.owner); store.set("repo", cfg.repo); store.set("token", cfg.token);
+    done(); showApp();
+  } catch (e) { message("Verbindung fehlgeschlagen", e.message); }
+};
+$("signout").onclick = async () => {
+  if (!(await confirmBox("Token entfernen?", "Der Token wird aus diesem Browser gelöscht."))) return;
+  store.del("token"); S.token = ""; showSetup();
+};
+document.addEventListener("visibilitychange", () => { if (!document.hidden && S.token) refresh(); });
+S.token ? showApp() : showSetup();
+</script>
+</body>
+</html>
