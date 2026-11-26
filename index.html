@@ -69,6 +69,7 @@ button { font: inherit; border: 0; cursor: pointer; }
 .tile.b { background: linear-gradient(160deg, #f0a03a, #d9770b); }
 .badge { font-size: 12px; font-weight: 700; }
 .ok { color: var(--ka); } .fail { color: var(--danger); } .run { color: var(--ebay); }
+textarea { font: inherit; color: var(--text); background: transparent; border: 0; outline: none; width: 100%; resize: vertical; }
 input, select { font: inherit; color: var(--text); background: transparent; border: 0; outline: none; width: 100%; min-width: 0; }
 input::placeholder { color: var(--muted); opacity: .7; }
 .row label { flex: none; }
@@ -193,6 +194,7 @@ a.row { color: var(--text); }
       <div class="row"><input id="e-name" placeholder="Name, z. B. iPhone 13"></div>
       <div class="row"><input id="e-query" placeholder="Suchbegriff, z. B. iphone 13 128gb" autocapitalize="off"></div>
       <div class="row small">Mehrere Varianten mit Komma trennen = oder (z. B. „rx 9070 xt, radeon 9070 xt“).</div>
+      <div class="row"><textarea id="e-hint" rows="3" placeholder="Genauer Wunsch für die KI (optional), z. B. „Nur die einzelne Karte RX 9070 XT, keine non-XT, kein Komplett-PC“"></textarea></div>
       <div class="row"><span class="grow">eBay</span><label class="switch"><input type="checkbox" id="e-ebay"><span></span></label></div>
       <div class="row"><span class="grow">Kleinanzeigen</span><label class="switch"><input type="checkbox" id="e-ka"><span></span></label></div>
     </div>
@@ -230,7 +232,7 @@ a.row { color: var(--text); }
       <div class="row"><span class="grow">Verdächtige trotzdem senden ⚠️</span><label class="switch"><input type="checkbox" id="e-susp"><span></span></label></div>
       <div class="row"><span class="grow">Aktiv</span><label class="switch"><input type="checkbox" id="e-active"><span></span></label></div>
     </div>
-    <p class="foot">Angebote unter dem Mindest-Vertrauen werden nicht gemeldet. Betrugs-Hinweise wie WhatsApp oder PayPal Freunde drücken den Score immer darunter.</p>
+    <p class="foot">Angebote unter dem Mindest-Vertrauen werden nicht gemeldet. Betrugs-Hinweise wie WhatsApp oder PayPal Freunde drücken den Score immer darunter. Mit KI-Key prüft Claude zusätzlich, ob das Angebot wirklich passt und kein Gesuch/Ankauf ist.</p>
     <div id="e-del-wrap" style="margin-top:22px"><div class="group"><button class="row tap btn danger" id="e-delete" style="justify-content:center">Suchauftrag löschen</button></div></div>
   </div>
 </section>
@@ -307,16 +309,16 @@ function issueBody(d) {
     f("Zustand", d.cond) + f("Kaufart (nur eBay)", { sofort: "Sofort-Kaufen", auktion: "Auktion" }[d.buying] || "egal") +
     f("PLZ (nur Kleinanzeigen)", d.radius ? d.plz : "") + f("Umkreis (nur Kleinanzeigen)", d.radius ? `${d.radius} km` : "ganz Deutschland") +
     `### Versand\n\n${b(d.ship, "Nur Angebote mit Versand (Kleinanzeigen)")}\n\n` +
-    f("Ausschlusswörter", d.exclude) + f("Mindest-Vertrauen", d.trust ? String(d.trust) : "Standard (60)") +
+    f("Ausschlusswörter", d.exclude) + f("Genauer Wunsch (für die KI-Prüfung)", d.hint) + f("Mindest-Vertrauen", d.trust ? String(d.trust) : "Standard (60)") +
     `### Optionen\n\n${b(d.susp, "Verdächtige Angebote trotzdem senden (⚠️)")}\n${b(!d.active, "Suchauftrag pausieren")}\n`;
 }
 function draftFrom(w) {
   return w ? { name: w.name, query: w.query, ebay: w.sources.includes("ebay"), ka: w.sources.includes("kleinanzeigen"),
     min: plain(w.min_price), max: plain(w.max_price), ref: plain(w.ref_price), cond: w.condition || "egal", buying: w.buying || "egal",
     plz: w.plz || "", radius: w.plz ? (w.radius || 0) : 0, ship: !!w.shipping_only, exclude: (w.exclude || []).join(", "),
-    trust: w.min_trust || 0, susp: !!w.send_suspicious, active: w.active !== false }
+    trust: w.min_trust || 0, susp: !!w.send_suspicious, active: w.active !== false, hint: w.ai_hint || "" }
   : { name: "", query: "", ebay: true, ka: true, min: "", max: "", ref: "", cond: "egal", buying: "egal", plz: "06773", radius: 50,
-      ship: false, exclude: "", trust: 0, susp: false, active: true };
+      ship: false, exclude: "", trust: 0, susp: false, active: true, hint: "" };
 }
 async function submit(title, body, busyText, silent = false) {
   busy(busyText);
@@ -411,7 +413,7 @@ window.openEditor = function (w) {
   $("e-title").textContent = w ? "Bearbeiten" : "Neuer Auftrag";
   $("e-name").value = d.name; $("e-query").value = d.query; $("e-ebay").checked = d.ebay; $("e-ka").checked = d.ka;
   $("e-min").value = d.min; $("e-max").value = d.max; $("e-ref").value = d.ref; setSeg(d.cond); $("e-buying").value = d.buying;
-  $("e-exclude").value = d.exclude; $("e-radius").value = String(d.radius); $("e-plz").value = d.plz; $("e-ship").checked = d.ship;
+  $("e-exclude").value = d.exclude; $("e-hint").value = d.hint; $("e-radius").value = String(d.radius); $("e-plz").value = d.plz; $("e-ship").checked = d.ship;
   $("e-trust").value = String(d.trust); $("e-susp").checked = d.susp; $("e-active").checked = d.active;
   $("e-del-wrap").classList.toggle("hidden", !w);
   syncVisibility();
@@ -423,7 +425,7 @@ function readEditor() {
   return { name: $("e-name").value.trim(), query: $("e-query").value.trim(), ebay: $("e-ebay").checked, ka: $("e-ka").checked,
     min: $("e-min").value, max: $("e-max").value, ref: $("e-ref").value, cond: $("e-cond").dataset.val, buying: $("e-buying").value,
     plz: $("e-plz").value.trim(), radius: +$("e-radius").value, ship: $("e-ship").checked, exclude: $("e-exclude").value,
-    trust: +$("e-trust").value, susp: $("e-susp").checked, active: $("e-active").checked };
+    trust: +$("e-trust").value, susp: $("e-susp").checked, active: $("e-active").checked, hint: $("e-hint").value.replace(/\s+/g, " ").trim() };
 }
 async function reloadSoon() { await sleep(1500); try { S.watches = await loadWatches(); } catch {} renderWatches(); renderStatus(); }
 $("e-save").onclick = async () => {
