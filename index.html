@@ -11,6 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Watcher">
 <meta name="referrer" content="no-referrer">
+<meta http-equiv="Cache-Control" content="no-cache">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
@@ -284,6 +285,20 @@ a.row { color: var(--text); }
 
 <script>
 "use strict";
+const APP_VERSION = "202611261345";
+// Neue Version auf dem Server? Dann automatisch neu laden (iOS hält Home-Bildschirm-Apps sonst lange im Cache).
+async function checkUpdate() {
+  try {
+    const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
+    const v = (await r.json()).version;
+    if (v && v !== APP_VERSION && sessionStorage.getItem("reloadedFor") !== v) {
+      sessionStorage.setItem("reloadedFor", v);
+      location.replace(location.pathname + "?v=" + v);
+    }
+  } catch {}
+}
+checkUpdate();
+document.addEventListener("visibilitychange", () => { if (!document.hidden) checkUpdate(); });
 const $ = (id) => document.getElementById(id);
 const store = {
   get(k, d = "") { try { return localStorage.getItem("watcher." + k) ?? d; } catch { return d; } },
