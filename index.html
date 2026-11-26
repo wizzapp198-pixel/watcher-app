@@ -118,6 +118,25 @@ a.row { color: var(--text); }
 .newdot { width: 8px; height: 8px; border-radius: 50%; background: var(--ebay); display: inline-block; margin-right: 6px; vertical-align: middle; }
 .fchip { font-size: 13px; padding: 6px 12px; border-radius: 99px; background: var(--card); color: var(--text); box-shadow: var(--shadow); }
 .fchip.on { background: var(--accent); color: #fff; }
+.deck { position: relative; height: min(calc(100vh - 380px), 500px); min-height: 330px; margin-top: 4px; touch-action: pan-y; }
+.card { position: absolute; inset: 0; background: var(--card); border-radius: 20px; overflow: hidden; box-shadow: 0 6px 24px rgba(0,0,0,.12);
+  display: flex; flex-direction: column; user-select: none; -webkit-user-select: none; will-change: transform; }
+.card.back { transform: scale(.95) translateY(12px); opacity: .7; }
+.card img.hero { width: 100%; height: 42%; object-fit: cover; background: var(--field); pointer-events: none; }
+.card .noimg { height: 42%; background: var(--field); display: flex; align-items: center; justify-content: center; font-size: 46px; }
+.card .info { padding: 14px 16px; flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 4px; }
+.card .ctitle, .card .cprice, .card .chips { flex-shrink: 0; }
+.card .ctitle { font-weight: 700; font-size: 18px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card .cprice { font-size: 22px; font-weight: 800; }
+.stamp { position: absolute; top: 22px; padding: 6px 14px; border: 4px solid; border-radius: 10px; font-weight: 800; font-size: 24px;
+  letter-spacing: .04em; opacity: 0; transform: rotate(-12deg); background: rgba(255,255,255,.85); }
+.stamp.keep { left: 18px; color: #1f9d55; border-color: #1f9d55; }
+.stamp.del { right: 18px; color: #d93025; border-color: #d93025; transform: rotate(12deg); }
+.swipe-btns { display: flex; justify-content: center; align-items: center; gap: 22px; margin: 18px 0 6px; }
+.round { width: 64px; height: 64px; border-radius: 50%; font-size: 28px; background: var(--card); box-shadow: 0 3px 12px rgba(0,0,0,.15); display: flex; align-items: center; justify-content: center; }
+.round.keep { color: #1f9d55; } .round.del { color: #d93025; } .round.small { width: 48px; height: 48px; font-size: 20px; color: var(--muted); }
+.round:disabled { opacity: .35; }
+.hint { text-align: center; font-size: 13px; color: var(--muted); }
 .logo { width: 56px; height: 56px; border-radius: 13px; display: block; margin: 20px 4px 4px; }
 </style>
 </head>
@@ -133,7 +152,7 @@ a.row { color: var(--text); }
     <div class="row step"><i>1</i><div>Unten auf „Token erstellen“ tippen und bei GitHub anmelden.</div></div>
     <div class="row step"><i>2</i><div>Name z. B. „Watcher Web“, Ablauf: 1 Jahr.</div></div>
     <div class="row step"><i>3</i><div>Repository access → <b>Only select repositories</b> → dein Watcher-Repo.</div></div>
-    <div class="row step"><i>4</i><div>Permissions: <b>Actions</b> Read and write, <b>Contents</b> Read-only, <b>Issues</b> Read and write.</div></div>
+    <div class="row step"><i>4</i><div>Permissions: <b>Actions</b> Read and write, <b>Contents</b> Read and write, <b>Issues</b> Read and write.</div></div>
     <div class="row step"><i>5</i><div>Generate token → kopieren → hier einfügen.</div></div>
     <a class="row tap chev" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener"><span class="grow">Token erstellen</span></a>
   </div>
@@ -153,6 +172,7 @@ a.row { color: var(--text); }
 <!-- Funde -->
 <main id="tab-found" class="tab hidden">
   <h1>Funde <button class="icon-btn" id="found-reload" aria-label="Aktualisieren" style="font-size:18px">↻</button></h1>
+  <div class="seg" id="found-mode" style="margin-bottom:10px"><button data-v="new" class="on">Neu</button><button data-v="kept">Behalten</button></div>
   <div class="chips" id="found-filter" style="margin:0 4px 12px"></div>
   <div id="found-list"></div>
 </main>
@@ -305,40 +325,146 @@ async function loadFound() {
   try { return JSON.parse(await api("/contents/found.json?ref=watcher-data", { accept: "application/vnd.github.raw+json" })).found || []; }
   catch (e) { if (e.code === 404) return []; throw e; }
 }
-S.found = []; S.foundFilter = "";
+S.found = []; S.foundFilter = ""; S.foundMode = "new"; S.undo = [];
+// Entscheidungen: links = behalten, rechts = löschen. Lokal gespeichert + Sync über decisions.json (Branch watcher-data).
+S.dec = (() => { try { return JSON.parse(store.get("decisions", "")) || { kept: {}, deleted: {} }; } catch { return { kept: {}, deleted: {} }; } })();
+S.decSha = null; S.syncState = "";
+function saveDecLocal() { store.set("decisions", JSON.stringify(S.dec)); }
+function mergeDec(a, b) {
+  const out = { kept: { ...a.kept, ...b.kept }, deleted: { ...a.deleted, ...b.deleted } };
+  for (const k of Object.keys(out.kept)) if (out.deleted[k]) { (out.deleted[k] > out.kept[k]) ? delete out.kept[k] : delete out.deleted[k]; }
+  return out;
+}
+async function loadDecRemote() {
+  try {
+    const meta = await api("/contents/decisions.json?ref=watcher-data");
+    S.decSha = meta.sha;
+    const bin = atob(meta.content.replace(/\n/g, ""));
+    const remote = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0))));
+    S.dec = mergeDec(remote, S.dec); saveDecLocal(); S.syncState = "ok";
+  } catch (e) { S.syncState = e.code === 404 ? "ok" : "off"; }
+}
+let syncTimer = null;
+function scheduleSync() { clearTimeout(syncTimer); syncTimer = setTimeout(pushDec, 1500); }
+async function pushDec() {
+  if (S.syncState === "off" || !S.found.length) return;
+  const json = JSON.stringify(S.dec);
+  const b64 = btoa(String.fromCharCode(...new TextEncoder().encode(json)));
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await api("/contents/decisions.json", { method: "PUT",
+        body: { message: "App: Funde sortiert", content: b64, branch: "watcher-data", ...(S.decSha ? { sha: S.decSha } : {}) } });
+      S.decSha = res.content.sha; S.syncState = "ok"; return;
+    } catch (e) {
+      if (/Berechtigung/.test(e.message)) { S.syncState = "off"; renderFound(); return; }
+      await loadDecRemote();   // sha veraltet -> neu laden, zusammenführen, nochmal
+    }
+  }
+}
+function decide(f, keep) {
+  const now = Date.now();
+  if (keep) { S.dec.kept[f.key] = now; delete S.dec.deleted[f.key]; }
+  else { S.dec.deleted[f.key] = now; delete S.dec.kept[f.key]; }
+  S.undo.push(f.key); saveDecLocal(); scheduleSync();
+}
+function undoLast() {
+  const k = S.undo.pop(); if (!k) return;
+  delete S.dec.kept[k]; delete S.dec.deleted[k]; saveDecLocal(); scheduleSync(); renderFound();
+}
+const priceOf = (f) => f.price == null ? "Preis k. A." : euro(f.price) + (f.price_negotiable ? " VB" : "");
+const badgeOf = (f) => f.kind === "bargain" ? "🔥 " : f.kind === "suspicious" ? "⚠️ " : "";
 function renderFound() {
-  const lastSeen = store.get("foundSeen", "");
-  const names = [...new Set(S.found.map((f) => f.watch))];
+  const visible = S.found.filter((f) => !S.dec.deleted[f.key]);
+  const fresh = visible.filter((f) => !S.dec.kept[f.key]);
+  const kept = visible.filter((f) => S.dec.kept[f.key]);
+  $("found-mode").querySelectorAll("button").forEach((b) => {
+    b.classList.toggle("on", b.dataset.v === S.foundMode);
+    b.textContent = b.dataset.v === "new" ? `Neu (${fresh.length})` : `Behalten (${kept.length})`;
+  });
+  const base = S.foundMode === "new" ? fresh : kept;
+  const names = [...new Set(base.map((f) => f.watch))];
+  if (S.foundFilter && !names.includes(S.foundFilter)) S.foundFilter = "";
   $("found-filter").innerHTML = names.length > 1 ? ["", ...names].map((n) =>
     `<button class="fchip ${S.foundFilter === n ? "on" : ""}" data-w="${esc(n)}">${n ? esc(n) : "Alle"}</button>`).join("") : "";
   $("found-filter").querySelectorAll("button").forEach((b) => b.onclick = () => { S.foundFilter = b.dataset.w; renderFound(); });
-  const list = S.found.filter((f) => !S.foundFilter || f.watch === S.foundFilter);
+  const list = base.filter((f) => !S.foundFilter || f.watch === S.foundFilter);
+  const syncNote = S.syncState === "off"
+    ? `<p class="foot">Sortierung wird nur auf diesem Gerät gespeichert. Für Abgleich mit der iPhone-App: Token-Recht <b>Contents → Read and write</b>.</p>` : "";
+  if (S.foundMode === "new") return renderDeck(list, syncNote);
   if (!list.length) {
-    $("found-list").innerHTML = `<div class="empty"><div class="big">📭</div><h3>Noch keine Funde</h3>
-      <p>Hier erscheinen alle Angebote, die der Watcher gemeldet hat, auch wenn eine Push-Nachricht nicht ankommt.</p></div>`;
+    $("found-list").innerHTML = `<div class="empty"><div class="big">⭐️</div><h3>Noch nichts behalten</h3><p>Wische unter „Neu“ ein Angebot nach links, um es hier zu speichern.</p></div>` + syncNote;
     return;
   }
-  $("found-list").innerHTML = `<div class="group">${list.map((f) => {
-    const price = f.price == null ? "Preis k. A." : euro(f.price) + (f.price_negotiable ? " VB" : "");
-    const isNew = lastSeen && f.found_at > lastSeen;
-    const badge = f.kind === "bargain" ? "🔥 " : f.kind === "suspicious" ? "⚠️ " : "";
-    return `<a class="fitem tap" href="${esc(f.url)}" target="_blank" rel="noopener">
+  $("found-list").innerHTML = `<div class="group">${list.map((f) => `
+    <div class="fitem"><a href="${esc(f.url)}" target="_blank" rel="noopener" style="display:contents;color:inherit">
       ${f.image ? `<img class="thumb" src="${esc(f.image)}" alt="" loading="lazy">` : `<div class="thumb"></div>`}
-      <div class="grow" style="min-width:0">
-        <div class="ftitle">${isNew ? '<span class="newdot"></span>' : ""}${badge}${esc(f.title)}</div>
-        <div class="fprice">${price}</div>
+      <div class="grow" style="min-width:0"><div class="ftitle">${badgeOf(f)}${esc(f.title)}</div><div class="fprice">${priceOf(f)}</div>
         <div class="chips"><span class="chip ${esc(f.source)}">${f.source === "ebay" ? "eBay" : "Kleinanzeigen"}</span>
-          <span class="small">${esc(f.watch)} · ${rel(f.found_at)} · Vertrauen ${f.score}</span></div>
-        ${f.reasons ? `<div class="small" style="margin-top:3px">${esc(f.reasons)}</div>` : ""}
-      </div></a>`;
-  }).join("")}</div><p class="foot">Antippen öffnet das Angebot. Gespeichert werden die letzten 300 Funde.</p>`;
+        <span class="small">${esc(f.watch)} · ${rel(f.found_at)}</span></div></div></a>
+      <button class="btn plain" data-del="${esc(f.key)}" aria-label="Löschen" style="color:var(--danger);font-size:20px">🗑</button></div>`).join("")}</div>
+    <p class="foot">Antippen öffnet das Angebot.</p>` + syncNote;
+  $("found-list").querySelectorAll("[data-del]").forEach((b) => b.onclick = () => {
+    const f = S.found.find((x) => x.key === b.dataset.del); if (f) { decide(f, false); renderFound(); }
+  });
 }
-async function refreshFound(markSeen) {
-  try { S.found = await loadFound(); } catch (e) { message("Funde laden fehlgeschlagen", e.message); }
+function cardHTML(f, cls) {
+  return `<div class="card ${cls}">
+    ${f.image ? `<img class="hero" src="${esc(f.image)}" alt="" draggable="false">` : `<div class="noimg">🛍️</div>`}
+    <div class="info"><div class="ctitle">${badgeOf(f)}${esc(f.title)}</div><div class="cprice">${priceOf(f)}</div>
+      <div class="chips"><span class="chip ${esc(f.source)}">${f.source === "ebay" ? "eBay" : "Kleinanzeigen"}</span>
+      <span class="small">${esc(f.watch)} · ${rel(f.found_at)}${f.location ? " · " + esc(f.location) : ""}</span></div>
+      <div class="small">Vertrauen ${f.score ?? "–"}${f.reasons ? " · " + esc(f.reasons) : ""}</div>
+</div>
+    <div class="stamp keep">BEHALTEN</div><div class="stamp del">LÖSCHEN</div></div>`;
+}
+function renderDeck(list, syncNote) {
+  const el = $("found-list");
+  if (!list.length) {
+    el.innerHTML = `<div class="empty"><div class="big">🎉</div><h3>Alles sortiert</h3>
+      <p>Neue Angebote erscheinen hier, sobald der Watcher etwas meldet – auch wenn eine Push-Nachricht nicht ankommt.</p>
+      ${S.undo.length ? '<button class="btn" style="width:auto" id="undo2">↶ Rückgängig</button>' : ""}</div>` + syncNote;
+    if ($("undo2")) $("undo2").onclick = undoLast;
+    return;
+  }
+  const [top, next] = list;
+  el.innerHTML = `<div class="deck">${next ? cardHTML(next, "back") : ""}${cardHTML(top, "top")}</div>
+    <div class="swipe-btns">
+      <button class="round keep" id="sw-keep" aria-label="Behalten">✓</button>
+      <button class="round small" id="sw-undo" aria-label="Rückgängig" ${S.undo.length ? "" : "disabled"}>↶</button>
+      <button class="round del" id="sw-del" aria-label="Löschen">✕</button>
+    </div>
+    <p class="hint">Antippen = Angebot öffnen<br>← links wischen = behalten · rechts wischen = löschen →<br>${list.length} offen</p>` + syncNote;
+  const card = el.querySelector(".card.top"), keepS = card.querySelector(".stamp.keep"), delS = card.querySelector(".stamp.del");
+  const fly = (keep) => {
+    card.style.transition = "transform .3s ease-out, opacity .3s";
+    card.style.transform = `translateX(${keep ? -500 : 500}px) rotate(${keep ? -25 : 25}deg)`; card.style.opacity = "0";
+    decide(top, keep); setTimeout(renderFound, 260);
+  };
+  $("sw-keep").onclick = () => fly(true); $("sw-del").onclick = () => fly(false); $("sw-undo").onclick = undoLast;
+  let x0 = null, y0 = 0, dx = 0, moved = false;
+  card.addEventListener("pointerdown", (e) => { if (e.target.closest("a")) return; x0 = e.clientX; y0 = e.clientY; dx = 0; moved = false; card.setPointerCapture(e.pointerId); card.style.transition = "none"; });
+  card.addEventListener("pointermove", (e) => {
+    if (x0 === null) return; dx = e.clientX - x0; const dy = e.clientY - y0;
+    if (!moved && Math.abs(dx) < 6) return; moved = true;
+    card.style.transform = `translate(${dx}px, ${dy * 0.2}px) rotate(${dx / 18}deg)`;
+    keepS.style.opacity = Math.min(1, Math.max(0, -dx / 90)); delS.style.opacity = Math.min(1, Math.max(0, dx / 90));
+  });
+  const end = () => {
+    if (x0 === null) return; x0 = null;
+    if (!moved) { window.open(top.url, "_blank", "noopener"); return; }
+    if (dx < -100) return fly(true);
+    if (dx > 100) return fly(false);
+    card.style.transition = "transform .25s"; card.style.transform = ""; keepS.style.opacity = 0; delS.style.opacity = 0;
+  };
+  card.addEventListener("pointerup", end); card.addEventListener("pointercancel", end);
+}
+$("found-mode").querySelectorAll("button").forEach((b) => b.onclick = () => { S.foundMode = b.dataset.v; S.foundFilter = ""; renderFound(); });
+async function refreshFound() {
+  try { const [f] = await Promise.all([loadFound(), loadDecRemote()]); S.found = f; }
+  catch (e) { message("Funde laden fehlgeschlagen", e.message); }
   renderFound();
-  if (markSeen && S.found.length) setTimeout(() => store.set("foundSeen", S.found[0].found_at), 1500);
 }
-$("found-reload").onclick = () => refreshFound(true);
+$("found-reload").onclick = () => refreshFound();
 async function loadRuns() { return (await api("/actions/workflows/watch.yml/runs?per_page=15")).workflow_runs || []; }
 
 // ---- Meldungen ------------------------------------------------------------
@@ -514,7 +640,7 @@ $("test-push").onclick = () => dispatch(true);
 function showTab(name) {
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("hidden", t.id !== "tab-" + name));
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
-  if (name === "found") refreshFound(true);
+  if (name === "found") refreshFound();
   if (name === "status") loadRuns().then((r) => { S.runs = r; renderStatus(); }).catch(() => {});
   window.scrollTo(0, 0);
 }
